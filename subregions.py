@@ -1,6 +1,7 @@
 import csv
 import sys
 import re
+import os
 
 rank_regx = re.compile("(\d+)( of )(\d+)")
 
@@ -53,17 +54,50 @@ class SubregionGroup(object):
         self.file = subregion.filename[0:5]
 
     def fill_with_basic_levels(self, basic_levels):
-
-        segments = []
-        for subregion in self.subregions:
-
-
         for bl in basic_levels:
-            if bl[0][0:5] not in self.subregions:
-                continue
-            else:
-                regions = self.subregions[bl[0:5]]
-                for region in regions
+            time_split = bl[6].split("_")
+            onset = time_split[0]
+            offset = time_split[1]
+            word_added_to_subregion = False
+
+            for rank, region in self.subregions.iteritems():
+                if (region.onset <= onset) and (region.offset >= offset):
+                    region.add_word(bl)
+                    word_added_to_subregion = True
+
+            if not word_added_to_subregion:
+                self.unbounded_words.append(bl)
+
+    def output(self):
+        """
+        Outputs each subregion into it's own csv containing all the words.
+        The words that were not bounded within a subregion will be in their
+        own seperate subregion.
+        """
+        # make directory for the file
+        file_dir = self.file
+        if not os.path.exists(file_dir):
+            os.makedirs(file_dir)
+
+        header = ["id", "tier", "object", "utterance_type",
+                  "object_present", "speaker", "timestamp",
+                  "basic_level"]
+
+        # make directory for the subregions
+        for rank, region in self.subregions.iteritems():
+            region_file = os.path.join(file_dir, "subregion_{}.csv".format(rank))
+            with open(region_file, "wb") as output:
+                writer = csv.writer(output)
+                writer.writerow(header)
+                for word in region.words:
+                    writer.writerow(word)
+
+        unbounded_words_path = os.path.join(file_dir, "ubnounded_words.csv")
+        with open(unbounded_words_path, "wb") as unbounded:
+            writer = csv.writer(unbounded)
+            writer.writerow(header)
+            for word in self.unbounded_words:
+                writer.writerow(word)
 
 class Subregion(object):
     def __init__(self, filename, rank, onset, line):
@@ -90,6 +124,7 @@ class Subregion(object):
         :param word: basic_level entry
         """
         self.words.append(word)
+
 
 def get_subregions(all_comments):
     subregions = SubregionGroup()
@@ -123,6 +158,8 @@ def get_subregions(all_comments):
                 first_subr = False
 
     return all_files
+
+
 
 def basic_level_file_partition(all_basic_level, filename):
     bl_for_file = []
@@ -165,6 +202,8 @@ if __name__ == "__main__":
     subr_for_file.fill_with_basic_levels(bl_for_file)
 
     print subr_for_file
+
+    subr_for_file.output()
 
     #subr_for_file = all_subregions.for_file(filename)
     #print subr_for_file
